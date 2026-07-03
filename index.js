@@ -235,7 +235,11 @@ app.post("/api/login", async (req, res) => {
     const users = cloudUsers[company_id] || [];
 
     // 1. पहले यूजरनाम मैच करें
-    const user = users.find((u) => u.username === username);
+    const user = users.find(
+      (u) =>
+        (u.username || "").toLowerCase().trim() ===
+        username.toLowerCase().trim(),
+    );
 
     if (!user) {
       return res.status(401).json({
