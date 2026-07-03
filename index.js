@@ -7,6 +7,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
 
 const app = express();
 app.use(cors());
@@ -228,20 +229,37 @@ app.get("/api/companies", (req, res) => {
 });
 
 // C. मोबाइल ऐप के लिए क्लाउड लॉगिन वेरिफिकेशन रूट
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const { username, password, company_id } = req.body;
     const users = cloudUsers[company_id] || [];
 
-    // क्रेडेंशियल्स चेक करना
-    const user = users.find(
-      (u) => u.username === username && u.password === password,
-    );
+    // 1. पहले यूजरनाम मैच करें
+    const user = users.find((u) => u.username === username);
 
-    if (user) {
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "❌ Invalid Cloud Username or Password!",
+      });
+    }
+
+    // 2. Bcrypt के जरिए हैशेड पासवर्ड की तुलना करें
+    const userPassword = user.password || "";
+    let isMatch = false;
+
+    if (userPassword.startsWith("$2")) {
+      // अगर पासवर्ड Bcrypt से हैश किया हुआ है
+      isMatch = await bcrypt.compare(password, userPassword);
+    } else {
+      // फॉलबैक: पुराना प्लेन टेक्स्ट पासवर्ड
+      isMatch = userPassword === password;
+    }
+
+    if (isMatch) {
       res.status(200).json({
         success: true,
-        token: "NEX_CLOUD_" + Date.now(), // डमी टोकन मोबाइल ऐप के लिए
+        token: "NEX_CLOUD_" + Date.now(),
         role: user.role,
         permissions:
           typeof user.permissions === "string"
