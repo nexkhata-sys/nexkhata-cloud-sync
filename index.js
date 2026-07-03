@@ -195,6 +195,71 @@ app.post("/api/cloud/update-summary", (req, res) => {
   }
 });
 
+let cloudCompanies = {}; // क्लाउड पर सक्रिय कंपनियों की लिस्ट
+let cloudUsers = {}; // क्लाउड पर लॉगिन के लिए क्रेडेंशियल्स
+
+// A. लोकल पीसी केवल पेड प्लान होने पर यहाँ आकर अपना लॉगिन डेटा सिंक करेगा
+app.post("/api/cloud/sync-auth", (req, res) => {
+  try {
+    const { company_id, companyProfile, users } = req.body;
+    if (!company_id)
+      return res.status(400).json({ success: false, message: "Missing ID" });
+
+    cloudCompanies[company_id] = companyProfile;
+    cloudUsers[company_id] = users; // [ {username, password, role, permissions} ]
+
+    console.log(
+      `🔐 Auth & Company synced to cloud for Company ID: ${company_id}`,
+    );
+    res.json({ success: true, message: "Auth data synced safely!" });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// B. मोबाइल ऐप के लिए कंपनियों की लिस्ट का रूट (जो एरर आ रही थी वो अब यहाँ से सॉल्व होगी)
+app.get("/api/companies", (req, res) => {
+  try {
+    const list = Object.values(cloudCompanies);
+    res.status(200).json({ success: true, data: list });
+  } catch (e) {
+    res.status(500).json({ success: false, data: [] });
+  }
+});
+
+// C. मोबाइल ऐप के लिए क्लाउड लॉगिन वेरिफिकेशन रूट
+app.post("/api/login", (req, res) => {
+  try {
+    const { username, password, company_id } = req.body;
+    const users = cloudUsers[company_id] || [];
+
+    // क्रेडेंशियल्स चेक करना
+    const user = users.find(
+      (u) => u.username === username && u.password === password,
+    );
+
+    if (user) {
+      res.status(200).json({
+        success: true,
+        token: "NEX_CLOUD_" + Date.now(), // डमी टोकन मोबाइल ऐप के लिए
+        role: user.role,
+        permissions:
+          typeof user.permissions === "string"
+            ? JSON.parse(user.permissions)
+            : user.permissions,
+        message: `Welcome ${user.role} to Cloud Mode!`,
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        message: "❌ Invalid Cloud Username or Password!",
+      });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // B. मोबाइल ऐप सीधे यहाँ से उस कंपनी की समरी उठा लेगा
 app.get("/api/dashboard/summary", (req, res) => {
   try {
