@@ -176,6 +176,55 @@ app.get("/api/public/catalog/:companyId", (req, res) => {
 });
 
 // ====================================================
+// 📊 4. DYNAMIC DASHBOARD SUMMARY RELAY (NEW)
+// ====================================================
+let cloudDashboardSummaries = {}; // रैम में लाइव समरी होल्ड करने के लिए
+
+// A. दुकान का ऑफलाइन PC यहाँ आकर अपनी ताज़ा समरी जमा करेगा
+app.post("/api/cloud/update-summary", (req, res) => {
+  try {
+    const { company_id, summaryData } = req.body;
+    if (!company_id || !summaryData)
+      return res.status(400).json({ success: false });
+
+    cloudDashboardSummaries[company_id] = summaryData;
+    console.log(`📊 Cloud Summary updated for Company ID: ${company_id}`);
+    res.json({ success: true, message: "Summary synced to cloud!" });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+});
+
+// B. मोबाइल ऐप सीधे यहाँ से उस कंपनी की समरी उठा लेगा
+app.get("/api/dashboard/summary", (req, res) => {
+  try {
+    const cid = req.query.company_id || 1;
+    const summary = cloudDashboardSummaries[cid];
+
+    if (summary) {
+      res.status(200).json({ success: true, data: summary });
+    } else {
+      // अगर पहली बार में डेटा न मिले तो ब्लैंक फॉलबैक भेजें ताकि मोबाइल ऐप क्रैश न हो
+      res.status(200).json({
+        success: true,
+        data: {
+          totalSales: 0,
+          totalPurchase: 0,
+          bankAccounts: 0,
+          cashInHand: 0,
+          sundryDebtors: 0,
+          sundryCreditors: 0,
+          recentActivity: [],
+          monthlyTrend: [],
+        },
+      });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: "Cloud Summary Error" });
+  }
+});
+
+// ====================================================
 // 🚀 START SERVER
 // ====================================================
 const PORT = process.env.PORT || 10000;
