@@ -47,6 +47,15 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`🔴 Device Disconnected: ${socket.id}`);
   });
+
+  socket.on("deliver_local_report", (packet) => {
+    const { requestId, responseData } = packet;
+    if (pendingRequests.has(requestId)) {
+      const res = pendingRequests.get(requestId);
+      pendingRequests.delete(requestId);
+      res.status(200).json(responseData);
+    }
+  });
 });
 
 // ====================================================
@@ -173,6 +182,40 @@ app.get("/api/public/catalog/:companyId", (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: "Cloud Error" });
+  }
+});
+
+// ====================================================
+// 🚇 UNIVERSAL LIVE REPORT TUNNEL (NEW)
+// ====================================================
+const pendingRequests = new Map(); // रैम में मोबाइल रिक्वेस्ट होल्ड करने के लिए
+
+app.get("/api/reports/:reportType", (req, res) => {
+  try {
+    const { reportType } = req.params;
+    const company_id = req.query.company_id || "1";
+    const requestId = `REQ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+    pendingRequests.set(requestId, res);
+
+    // दुकान के पीसी को सॉकेट पर सिग्नल भेजें
+    io.to(company_id).emit("fetch_local_report", {
+      requestId,
+      endpoint: `/api/reports/${reportType}`,
+      queryParams: req.query,
+    });
+
+    // 8 सेकंड का सेफ्टी टाइमआउट
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId);
+        res
+          .status(504)
+          .json({ success: false, message: "⚡ Shop PC Server Timeout!" });
+      }
+    }, 8000);
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 });
 
